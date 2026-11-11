@@ -1,0 +1,36 @@
+{
+  "name": "ai-usage",
+  "displayName": "AI Usage (local)",
+  "description": "Shows Claude Code and Codex usage limits in the status bar. Local, read-only, no dependencies.",
+  "version": "0.5.3",
+  "publisher": "local",
+  "private": true,
+  "engines": { "vscode": "^1.90.0" },
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "aiUsage.refresh", "title": "Refresh", "category": "AI Usage" },
+      { "command": "aiUsage.setTimeZone", "title": "Set Time Zone", "category": "AI Usage" },
+      { "command": "aiUsage.openSettings", "title": "Open Settings", "category": "AI Usage" }
+    ],
+    "configuration": {
+      "title": "AI Usage",
+      "properties": {
+        "aiUsage.intervalSeconds": {
+          "type": "number",
+          "default": 180,
+          "minimum": 60,
+          "description": "How often to fetch usage while the window is focused. Also fetches when a limit resets and when the window regains focus."
+        },
+        "aiUsage.timeZone": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "IANA time zone for the times shown, e.g. `Asia/Tehran` or `America/Edmonton`. Empty uses the system time zone. Budget days follow the weekly window, so this changes only how times are displayed."
+        },
+        "aiUsage.claude.enabled": { "type": "boolean", "default": true, "description": "Show Claude usage." },
+        "aiUsage.codex.enabled": { "type": "boolean", "default": true, "description": "Show Codex usage." }
+      }
+    }
+  }
+}
