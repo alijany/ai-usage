@@ -5,6 +5,8 @@
   "version": "0.5.3",
   "publisher": "local",
   "private": true,
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/alijany/ai-usage" },
   "engines": { "vscode": "^1.90.0" },
   "main": "./extension.js",
   "activationEvents": ["onStartupFinished"],

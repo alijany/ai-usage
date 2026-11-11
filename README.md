@@ -97,6 +97,10 @@ Then run **Developer: Reload Window**. VS Code reads new commands and settings o
 - Each open VS Code window polls on its own.
 - The bars in the hover use fixed colors chosen to read on both light and dark themes.
 
+## License
+
+[MIT](LICENSE)
+
 ## Credits
 
 Designed and written by [Claude Code](https://claude.com/claude-code) (Claude Opus 5.5) in a single session, from investigating how each tool reports its limits to the code and this README, with the owner steering the design and testing it in VS Code.
