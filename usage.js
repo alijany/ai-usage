@@ -60,6 +60,63 @@ function windowOf(percent, resetsAt) {
   return { percent, resetsAt: resetsAt ? new Date(resetsAt) : null };
 }
 
+// Claude's profile gives the subscription status and start date, but no end
+// date. It changes rarely, so it is fetched at most every 6 hours.
+const PROFILE_TTL = 6 * 60 * 60 * 1000;
+let claudeProfile = { at: 0, value: null };
+
+async function claudeSubscription(token) {
+  if (Date.now() - claudeProfile.at < PROFILE_TTL) return claudeProfile.value;
+  try {
+    const p = await getJson("api.anthropic.com", "/api/oauth/profile", {
+      Authorization: "Bearer " + token,
+      "anthropic-beta": "oauth-2025-04-20",
+    });
+    const org = p.organization || {};
+    claudeProfile = {
+      at: Date.now(),
+      value: {
+        status: org.subscription_status || null,
+        since: org.subscription_created_at ? new Date(org.subscription_created_at) : null,
+        // No end date is provided, and the start date is not the billing
+        // anchor, so the renewal date comes from the aiUsage.claude.renewsOn setting.
+        until: null,
+      },
+    };
+  } catch {
+    claudeProfile.at = Date.now() - PROFILE_TTL + 10 * 60 * 1000; // retry in 10 minutes
+  }
+  return claudeProfile.value;
+}
+
+// Codex: the ID token stored by Codex carries the current period's dates.
+// It is decoded locally; nothing is sent. It updates when Codex renews its sign-in.
+function codexSubscription(tokens) {
+  try {
+    const payload = JSON.parse(Buffer.from(tokens.id_token.split(".")[1], "base64url").toString("utf8"));
+    const a = payload["https://api.openai.com/auth"] || {};
+    const date = (v) => (v ? new Date(v) : null);
+    return { status: null, since: date(a.chatgpt_subscription_active_start), until: date(a.chatgpt_subscription_active_until) };
+  } catch {
+    return null;
+  }
+}
+
+// First billing date after `now`: `since` itself, or a later one stepping
+// `months` at a time (day clamped to the month's length, as card billing does).
+function nextAnniversary(since, months, now = Date.now()) {
+  const day = since.getUTCDate();
+  for (let n = 0; n <= 1200; n += months) {
+    const d = new Date(since.getTime());
+    d.setUTCDate(1);
+    d.setUTCMonth(since.getUTCMonth() + n);
+    const daysInMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(day, daysInMonth));
+    if (d.getTime() > now) return d;
+  }
+  return null;
+}
+
 // Claude: the endpoint behind /usage in Claude Code. Undocumented.
 async function fetchClaude() {
   const oauth = readJson(CLAUDE_CREDENTIALS).claudeAiOauth;
@@ -75,6 +132,7 @@ async function fetchClaude() {
     plan: oauth.subscriptionType || null,
     session: windowOf(d.five_hour && d.five_hour.utilization, d.five_hour && d.five_hour.resets_at),
     weekly: windowOf(d.seven_day && d.seven_day.utilization, d.seven_day && d.seven_day.resets_at),
+    subscription: await claudeSubscription(oauth.accessToken),
   };
 }
 
@@ -91,6 +149,7 @@ async function fetchCodex() {
     plan: d.plan_type || null,
     session: w(rl.primary_window),
     weekly: w(rl.secondary_window),
+    subscription: codexSubscription(tokens),
   };
 }
 
@@ -100,4 +159,5 @@ module.exports = {
     codex: { label: "Codex", fetch: fetchCodex, credentials: CODEX_AUTH },
   },
   fileStamp,
+  nextAnniversary,
 };

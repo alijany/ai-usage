@@ -11,7 +11,7 @@ Claude H 7% 4h28m · W 12% 6d18h    Codex H 5% 4h30m · W 17% 6d16h
 - **Text color**: today's budget (see below). Green is within it, yellow means 90% or more of it is used, red is over it.
 - **Background**: yellow when either limit reaches 80%, red at 95%. This takes precedence over the text color.
 
-Hovering shows progress bars for both limits, when each one resets, and today's budget. Clicking refreshes.
+Hovering shows progress bars for both limits, when each one resets, today's budget, and the time left in the current subscription period. Clicking refreshes.
 
 It has no dependencies and no build step beyond zipping. It is not published to the Marketplace.
 
@@ -39,7 +39,12 @@ Both tools must be installed and signed in with a subscription (Claude Pro/Max, 
 | Claude | `~/.claude/.credentials.json` (`claudeAiOauth.accessToken`) | `GET https://api.anthropic.com/api/oauth/usage` with `anthropic-beta: oauth-2025-04-20` |
 | Codex | `~/.codex/auth.json` (`tokens.access_token`, `tokens.account_id`) | `GET https://chatgpt.com/backend-api/wham/usage` with `ChatGPT-Account-Id` |
 
-These are the endpoints that Claude Code's `/usage` and the Codex extension use. **Neither one is documented**, so either may change without notice. When that happens, a warning icon appears next to the name and the last good numbers stay visible.
+These are the endpoints that Claude Code's `/usage` and the Codex extension use.
+
+### Subscription period
+
+- **Codex**: the end of the current period comes from the `id_token` that Codex stores in `~/.codex/auth.json` (`chatgpt_subscription_active_until`). It is decoded locally and nothing is sent. It updates when Codex renews its sign-in, so just after a renewal it can briefly show "period ended".
+- **Claude**: no renewal date is available to tools. `GET https://api.anthropic.com/api/oauth/profile` gives only the subscription status and a start date, and that start date is not the billing date. Enter the date shown at claude.ai → Settings → Billing once, with **AI Usage: Set Claude Renewal Date** or `aiUsage.claude.renewsOn`. Later renewals are then rolled forward monthly (or yearly, see `aiUsage.claude.billingCycle`). The profile is still read, at most every 6 hours, so a status other than `active` is shown. **Neither one is documented**, so either may change without notice. When that happens, a warning icon appears next to the name and the last good numbers stay visible.
 
 ### Security
 
@@ -60,12 +65,15 @@ These are the endpoints that Claude Code's `/usage` and the Codex extension use.
 | --- | --- |
 | AI Usage: Refresh | Fetch now |
 | AI Usage: Set Time Zone | Pick the time zone for displayed times |
+| AI Usage: Set Claude Renewal Date | Enter the renewal date from Claude's billing page |
 | AI Usage: Open Settings | Open this extension's settings |
 
 | Setting | Default | |
 | --- | --- | --- |
 | `aiUsage.intervalSeconds` | `180` | Fetch interval while focused (minimum 60) |
 | `aiUsage.timeZone` | `""` | IANA time zone for displayed times, e.g. `Asia/Tehran`. Empty uses the system's. It does not affect the budget. |
+| `aiUsage.claude.renewsOn` | `""` | Next Claude renewal date, `YYYY-MM-DD`, from the billing page |
+| `aiUsage.claude.billingCycle` | `monthly` | `monthly` or `yearly`; rolls the renewal date forward |
 | `aiUsage.claude.enabled` | `true` | Show Claude |
 | `aiUsage.codex.enabled` | `true` | Show Codex |
 

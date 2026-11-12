@@ -1,5 +1,5 @@
 const vscode = require("vscode");
-const { providers, fileStamp } = require("./usage");
+const { providers, fileStamp, nextAnniversary } = require("./usage");
 const { budget } = require("./budget");
 
 const MIN_GAP_MS = 60 * 1000; // never auto-fetch one provider more often than this
@@ -91,10 +91,30 @@ class Provider {
     this.item.tooltip = this.tooltip(s, w, this.budget);
   }
 
+  // Time left in the current subscription period. Codex states the end date.
+  // Claude does not, so its renewal date comes from settings and rolls forward.
+  subscription() {
+    const sub = this.last?.subscription;
+    if (!sub) return null;
+    if (sub.status && sub.status !== "active") return { text: esc(sub.status) };
+    let until = sub.until;
+    if (!until && this.key === "claude") {
+      const cfg = vscode.workspace.getConfiguration("aiUsage");
+      const on = parseDate(cfg.get("claude.renewsOn", ""));
+      if (!on) return { text: "[set renewal date](command:aiUsage.setClaudeRenewal)" };
+      until = nextAnniversary(on, cfg.get("claude.billingCycle", "monthly") === "yearly" ? 12 : 1);
+    }
+    if (!until) return null;
+    const date = until.toLocaleDateString([], { month: "short", day: "numeric", ...tzOpt() });
+    if (until.getTime() <= Date.now()) return { text: `period ended ${date}` };
+    return { text: `${left(until)} left (${date})` };
+  }
+
   tooltip(s, w, b) {
     const md = new vscode.MarkdownString("", true);
-    md.isTrusted = { enabledCommands: ["aiUsage.refresh"] };
-    md.appendMarkdown(`**${this.def.label}**${this.last?.plan ? ` · ${this.last.plan}` : ""}\n\n`);
+    md.isTrusted = { enabledCommands: ["aiUsage.refresh", "aiUsage.setClaudeRenewal"] };
+    const sub = this.subscription();
+    md.appendMarkdown(`**${this.def.label}**${this.last?.plan ? ` · ${this.last.plan}` : ""}${sub ? ` · ${sub.text}` : ""}\n\n`);
 
     if (this.last) {
       md.appendMarkdown(`**5 hours** · ${pct(s)} · resets ${when(s?.resetsAt)}\n\n`);
@@ -213,6 +233,34 @@ async function pickTimeZone() {
   }
 }
 
+// "YYYY-MM-DD" as local midnight, or null.
+function parseDate(text) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(text).trim());
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  return d.getMonth() === +m[2] - 1 && d.getDate() === +m[3] ? d : null;
+}
+
+async function setClaudeRenewal() {
+  const cfg = vscode.workspace.getConfiguration("aiUsage");
+  const value = await vscode.window.showInputBox({
+    title: "Claude renewal date",
+    prompt: "From claude.ai → Settings → Billing (\"auto renew on …\"). Later dates follow automatically.",
+    placeHolder: "YYYY-MM-DD",
+    value: cfg.get("claude.renewsOn", ""),
+    validateInput: (v) => (!v.trim() || parseDate(v) ? null : "Use YYYY-MM-DD, e.g. 2026-11-26"),
+  });
+  if (value === undefined) return;
+  try {
+    await cfg.update("claude.renewsOn", value.trim(), vscode.ConfigurationTarget.Global);
+  } catch {
+    const reload = "Reload Window";
+    const choice = await vscode.window.showWarningMessage(
+      "AI Usage was updated; reload the window before changing its settings.", reload);
+    if (choice === reload) vscode.commands.executeCommand("workbench.action.reloadWindow");
+  }
+}
+
 function esc(s) {
   return String(s).replace(/[\\`*_{}[\]()#+\-.!|<>]/g, "\\$&");
 }
@@ -233,12 +281,13 @@ function activate(context) {
   TZ = readTimeZone();
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (!e.affectsConfiguration("aiUsage.timeZone")) return;
+      if (!e.affectsConfiguration("aiUsage")) return;
       TZ = readTimeZone();
       list.forEach((p) => p.render());
     }),
     vscode.commands.registerCommand("aiUsage.refresh", () => tick(true)),
     vscode.commands.registerCommand("aiUsage.setTimeZone", pickTimeZone),
+    vscode.commands.registerCommand("aiUsage.setClaudeRenewal", setClaudeRenewal),
     vscode.commands.registerCommand("aiUsage.openSettings", () =>
       vscode.commands.executeCommand("workbench.action.openSettings", "@ext:local.ai-usage")),
     vscode.window.onDidChangeWindowState((s) => s.focused && tick(false))

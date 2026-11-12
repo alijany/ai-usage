@@ -2,7 +2,7 @@
   "name": "ai-usage",
   "displayName": "AI Usage (local)",
   "description": "Shows Claude Code and Codex usage limits in the status bar. Local, read-only, no dependencies.",
-  "version": "0.5.3",
+  "version": "0.6.1",
   "publisher": "local",
   "private": true,
   "license": "MIT",
@@ -14,6 +14,7 @@
     "commands": [
       { "command": "aiUsage.refresh", "title": "Refresh", "category": "AI Usage" },
       { "command": "aiUsage.setTimeZone", "title": "Set Time Zone", "category": "AI Usage" },
+      { "command": "aiUsage.setClaudeRenewal", "title": "Set Claude Renewal Date", "category": "AI Usage" },
       { "command": "aiUsage.openSettings", "title": "Open Settings", "category": "AI Usage" }
     ],
     "configuration": {
@@ -29,6 +30,18 @@
           "type": "string",
           "default": "",
           "markdownDescription": "IANA time zone for the times shown, e.g. `Asia/Tehran` or `America/Edmonton`. Empty uses the system time zone. Budget days follow the weekly window, so this changes only how times are displayed."
+        },
+        "aiUsage.claude.renewsOn": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^\\d{4}-\\d{2}-\\d{2}$",
+          "markdownDescription": "Your next Claude renewal date as `YYYY-MM-DD`, from claude.ai → Settings → Billing. Claude does not report it to tools. Later renewals follow automatically using `#aiUsage.claude.billingCycle#`."
+        },
+        "aiUsage.claude.billingCycle": {
+          "type": "string",
+          "enum": ["monthly", "yearly"],
+          "default": "monthly",
+          "description": "How your Claude subscription is billed; used to roll the renewal date forward."
         },
         "aiUsage.claude.enabled": { "type": "boolean", "default": true, "description": "Show Claude usage." },
         "aiUsage.codex.enabled": { "type": "boolean", "default": true, "description": "Show Codex usage." }
