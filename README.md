@@ -17,16 +17,18 @@ It has no runtime dependencies. The included `build.py` creates a local test VSI
 
 ## Daily budget
 
-The weekly window is split into seven equal 24-hour days, counted from the start of the window (the weekly reset minus seven days). Each day adds 100/7 ≈ 14.3% to the allowance:
+The weekly window is split into seven equal 24-hour days, counted from the start of the window (the weekly reset minus seven days). At the start of each day, what is left of the week is spread evenly over the days that remain, today included:
 
 ```
-allowance through today = day number × 14.3%
-left today              = allowance through today − weekly % used
+today's budget = (100 − weekly % used at day start) ÷ days remaining
+left today     = today's budget − (weekly % used now − weekly % used at day start)
 ```
 
-What earlier days saved or overspent carries into today. The calculation needs only the current reading, so nothing is stored. The marker on the weekly bar in the hover is the allowance through today.
+For example, on day 3 with 31% used at the start of the day, today's budget is 69 ÷ 5 = 13.8%. Saving on earlier days raises later budgets; overspending lowers them.
 
-The hover also shows an alternative: what is left of the week, spread evenly over the remaining days.
+The status bar shows `D left/budget`, for example `D 9/15%`. Its text color follows today's budget: green within, yellow at 90% or more, red when over. The marker on the weekly bar in the hover is the weekly % allowed through the end of today.
+
+The extension stores the reading at the start of each day in VS Code's global state. If VS Code was closed at a day boundary, the first reading of the new day is used as the start, so usage while it was closed counts toward earlier days. Right after installation, everything used so far counts toward earlier days.
 
 Days follow each tool's own weekly window, so a "day" may end at a different clock time for Claude and for Codex. The hover shows when the current one ends.
 

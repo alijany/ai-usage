@@ -60,25 +60,32 @@ class Provider {
 
   updateBudget() {
     const w = this.last?.weekly;
-    this.budget = w?.resetsAt ? budget(w.percent, w.resetsAt) : null;
+    if (!w?.resetsAt) { this.budget = null; return; }
+    const key = `aiUsage.day.${this.key}`;
+    const prev = this.context.globalState.get(key);
+    this.budget = budget(w.percent, w.resetsAt, prev);
+    const next = this.budget.state;
+    if (!prev || Object.keys(next).some((k) => next[k] !== prev[k])) this.context.globalState.update(key, next);
   }
 
   render() {
     const s = this.last?.session, w = this.last?.weekly;
     const label = this.def.label;
 
-    // H [5h %] [time to 5h reset] · W [week %] [time to weekly reset]
+    // H [5h %] [time to 5h reset] · W [week %] [time to weekly reset] · D [left today]/[today's budget]
     if (this.error?.auth) this.item.text = `$(key) ${label}`;
     else if (!this.last) this.item.text = `$(sync~spin) ${label}`;
     else {
+      const b = this.budget;
       this.item.text = `${label} H ${pct(s)} ${left(s?.resetsAt)} · W ${pct(w)} ${left(w?.resetsAt)}`
+        + (b ? ` · D ${Math.round(b.left)}/${Math.round(b.today)}%` : "")
         + (this.error ? " $(warning)" : "");
     }
 
     // Text color = today's budget: green within, yellow near (90%+), red over.
     // A limit warning background (below) takes precedence over this color.
     const b = this.budget;
-    const share = b && b.allowance > 0 ? (w.percent / b.allowance) * 100 : null;
+    const share = b ? shareOf(b) : null;
     this.item.color = share === null || this.error ? undefined
       : new vscode.ThemeColor(share > 100 ? "charts.red" : share >= 90 ? "charts.yellow" : "charts.green");
 
@@ -125,12 +132,12 @@ class Provider {
     }
 
     if (b) {
-      const share = b.allowance > 0 ? (w.percent / b.allowance) * 100 : 100;
+      const share = shareOf(b);
       md.appendMarkdown(`---\n\n**Day ${b.day} of 7** · ends ${when(b.dayEnd)}\n\n`);
-      md.appendMarkdown(`${num(w.percent)}% of ${num(b.allowance)}% allowed so far · `);
+      md.appendMarkdown(`${num(b.usedToday)}% of today's ${num(b.today)}% used · `);
       md.appendMarkdown(b.left >= 0 ? `**${num(b.left)}% left today**\n\n` : `**${num(-b.left)}% over**\n\n`);
       md.appendMarkdown(`${svgBar(share, { color: share > 100 ? COLOR.bad : share >= 90 ? COLOR.warn : COLOR.good })}\n\n`);
-      md.appendMarkdown(`<small>${num(b.perDay)}%/day · even split from now: ${num(b.evenFromNow)}%/day</small>\n\n`);
+      md.appendMarkdown(`<small>Today's budget = (100 − ${num(b.start)}% used at day start) ÷ ${b.daysRemaining} days left</small>\n\n`);
     }
 
     if (this.error) {
@@ -150,6 +157,8 @@ class Provider {
 }
 
 const pct = (w) => (w ? `${Math.round(w.percent)}%` : "–");
+// Percent of today's budget used.
+const shareOf = (b) => (b.today > 0 ? (b.usedToday / b.today) * 100 : b.usedToday > 0 ? 101 : 0);
 const num = (x) => (Math.abs(x) < 10 ? x.toFixed(1) : String(Math.round(x)));
 // Display time zone from settings: undefined = system, null = invalid name.
 let TZ;
@@ -267,7 +276,7 @@ function esc(s) {
 
 function activate(context) {
   const cfg = () => vscode.workspace.getConfiguration("aiUsage");
-  // Earlier versions kept a daily baseline here; it is no longer needed.
+  // Baselines from older versions used a different format.
   for (const key of Object.keys(providers)) context.globalState.update(`aiUsage.daily.${key}`, undefined);
 
   const list = [];
@@ -289,7 +298,7 @@ function activate(context) {
     vscode.commands.registerCommand("aiUsage.setTimeZone", pickTimeZone),
     vscode.commands.registerCommand("aiUsage.setClaudeRenewal", setClaudeRenewal),
     vscode.commands.registerCommand("aiUsage.openSettings", () =>
-      vscode.commands.executeCommand("workbench.action.openSettings", "@ext:local.ai-usage")),
+      vscode.commands.executeCommand("workbench.action.openSettings", "@ext:Alijany.ai-usage-alijany")),
     vscode.window.onDidChangeWindowState((s) => s.focused && tick(false))
   );
   // Re-render every minute so the countdowns and day boundaries stay current.
