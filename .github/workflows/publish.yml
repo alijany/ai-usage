@@ -1,0 +1,26 @@
+name: Publish VS Code extension
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify release tag
+        run: |
+          node -e 'const version = require("./package.json").version; const tag = process.env.GITHUB_REF_NAME; if (tag !== `v${version}`) { console.error(`Tag ${tag} must match package version v${version}`); process.exit(1); }'
+      - name: Publish to Visual Studio Marketplace
+        run: npx --yes @vscode/vsce publish --oidc

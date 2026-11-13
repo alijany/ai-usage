@@ -1,4 +1,4 @@
-# AI Usage
+# Claude & Codex Usage Budget
 
 A small, local VS Code extension that keeps your **Claude Code** and **Codex** usage limits in the status bar, with a daily budget so the weekly limit lasts the whole week.
 
@@ -13,7 +13,7 @@ Claude H 7% 4h28m · W 12% 6d18h    Codex H 5% 4h30m · W 17% 6d16h
 
 Hovering shows progress bars for both limits, when each one resets, today's budget, and the time left in the current subscription period. Clicking refreshes.
 
-It has no dependencies and no build step beyond zipping. It is not published to the Marketplace.
+It has no runtime dependencies. The included `build.py` creates a local test VSIX; Marketplace releases are packaged with `vsce`.
 
 ## Daily budget
 
@@ -79,14 +79,26 @@ These are the endpoints that Claude Code's `/usage` and the Codex extension use.
 
 ## Install and update
 
-Requires Python 3 (for packaging) and the `code` command.
+After publication, search for **Claude & Codex Usage Budget** in the VS Code Extensions view or install it with:
+
+```powershell
+code --install-extension Alijany.ai-usage-alijany
+```
+
+For a local test build, Python 3 and the `code` command are required:
 
 ```powershell
 python build.py
-code --install-extension ai-usage.vsix --force
+code --install-extension ai-usage-alijany.vsix --force
 ```
 
 Then run **Developer: Reload Window**. VS Code reads new commands and settings only after a reload. Bump `version` in `package.json` for each change so VS Code picks up the new build.
+
+### Automated Marketplace releases
+
+The GitHub Actions workflow publishes when a pushed tag matches the version in `package.json`, for example `v0.6.2`. Before using it, create a **Trusted Publishing** policy for the `Alijany` publisher with repository owner `alijany`, repository `ai-usage`, and workflow `publish.yml`. Then update the package version, push the commit, and push the matching tag. The workflow uses OIDC; no publishing token is stored in GitHub.
+
+The Marketplace release package is marked public and includes the icon as a Marketplace asset. If an existing listing still shows Private, change its Availability in the Marketplace publisher management page; then publish a new version.
 
 ## Files
 
@@ -96,6 +108,7 @@ Then run **Developer: Reload Window**. VS Code reads new commands and settings o
 | `usage.js` | Reads credentials and fetches usage from both services |
 | `budget.js` | Daily budget calculation |
 | `package.json` | Extension manifest: commands and settings |
+| `icon.png` | Extension icon |
 | `build.py` | Packages the extension as a VSIX without npm or `vsce` |
 
 ## Limitations
