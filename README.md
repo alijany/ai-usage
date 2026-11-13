@@ -17,18 +17,19 @@ It has no runtime dependencies. The included `build.py` creates a local test VSI
 
 ## Daily budget
 
-The weekly window is split into seven equal 24-hour days, counted from the start of the window (the weekly reset minus seven days). At the start of each day, what is left of the week is spread evenly over the days that remain, today included:
+The weekly window is split into seven equal 24-hour days, counted from the start of the window (the weekly reset minus seven days). The budget is calculated from the current reading alone; nothing is stored. Earlier days are allotted their even share, 100/7 ≈ 14.3% each, and weekly use beyond that counts as today's. If earlier days used less, the saving is spread over today and the days that remain:
 
 ```
-today's budget = (100 − weekly % used at day start) ÷ days remaining
-left today     = today's budget − (weekly % used now − weekly % used at day start)
+earlier days   = min(weekly % used, days passed × 14.3%)
+today's budget = (100 − earlier days) ÷ days remaining, today included
+used today     = weekly % used − earlier days
 ```
 
-For example, on day 3 with 31% used at the start of the day, today's budget is 69 ÷ 5 = 13.8%. Saving on earlier days raises later budgets; overspending lowers them.
+For example, on day 3 with 31% used: earlier days = min(31, 28.6) = 28.6, today's budget = 71.4 ÷ 5 = 14.3%, used today = 2.4%. With 20% used: earlier days = 20, today's budget = 80 ÷ 5 = 16%, used today = 0.
 
-The status bar shows `D left/budget`, for example `D 9/15%`. Its text color follows today's budget: green within, yellow at 90% or more, red when over. The marker on the weekly bar in the hover is the weekly % allowed through the end of today.
+Below the even pace, today's use cannot be told apart from earlier days' use, so it lowers the budget for today and the remaining days instead of showing as used today. Above it, everything beyond the even pace counts as today's.
 
-The extension stores the reading at the start of each day in VS Code's global state. If VS Code was closed at a day boundary, the first reading of the new day is used as the start, so usage while it was closed counts toward earlier days. Right after installation, everything used so far counts toward earlier days.
+The status bar shows `D`, the percent of today's budget used (100% = the whole budget), and the time until the day ends, for example `D 60% 5h12m`. Its text color follows today's budget: green within, yellow at 90% or more, red when over. The marker on the weekly bar in the hover is the weekly % allowed through the end of today.
 
 Days follow each tool's own weekly window, so a "day" may end at a different clock time for Claude and for Codex. The hover shows when the current one ends.
 

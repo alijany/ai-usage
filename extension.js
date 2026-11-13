@@ -60,25 +60,20 @@ class Provider {
 
   updateBudget() {
     const w = this.last?.weekly;
-    if (!w?.resetsAt) { this.budget = null; return; }
-    const key = `aiUsage.day.${this.key}`;
-    const prev = this.context.globalState.get(key);
-    this.budget = budget(w.percent, w.resetsAt, prev);
-    const next = this.budget.state;
-    if (!prev || Object.keys(next).some((k) => next[k] !== prev[k])) this.context.globalState.update(key, next);
+    this.budget = w?.resetsAt ? budget(w.percent, w.resetsAt) : null;
   }
 
   render() {
     const s = this.last?.session, w = this.last?.weekly;
     const label = this.def.label;
 
-    // H [5h %] [time to 5h reset] · W [week %] [time to weekly reset] · D [left today]/[today's budget]
+    // H [5h %] [time to 5h reset] · W [week %] [time to weekly reset] · D [% of today's budget] [time to day end]
     if (this.error?.auth) this.item.text = `$(key) ${label}`;
     else if (!this.last) this.item.text = `$(sync~spin) ${label}`;
     else {
       const b = this.budget;
       this.item.text = `${label} H ${pct(s)} ${left(s?.resetsAt)} · W ${pct(w)} ${left(w?.resetsAt)}`
-        + (b ? ` · D ${Math.round(b.left)}/${Math.round(b.today)}%` : "")
+        + (b ? ` · D ${Math.round(shareOf(b))}% ${left(b.dayEnd)}` : "")
         + (this.error ? " $(warning)" : "");
     }
 
@@ -134,10 +129,10 @@ class Provider {
     if (b) {
       const share = shareOf(b);
       md.appendMarkdown(`---\n\n**Day ${b.day} of 7** · ends ${when(b.dayEnd)}\n\n`);
-      md.appendMarkdown(`${num(b.usedToday)}% of today's ${num(b.today)}% used · `);
-      md.appendMarkdown(b.left >= 0 ? `**${num(b.left)}% left today**\n\n` : `**${num(-b.left)}% over**\n\n`);
+      md.appendMarkdown(`**Today** · ${Math.round(share)}% of budget used · `);
+      md.appendMarkdown(share <= 100 ? `**${Math.round(100 - share)}% left**\n\n` : `**${Math.round(share - 100)}% over**\n\n`);
       md.appendMarkdown(`${svgBar(share, { color: share > 100 ? COLOR.bad : share >= 90 ? COLOR.warn : COLOR.good })}\n\n`);
-      md.appendMarkdown(`<small>Today's budget = (100 − ${num(b.start)}% used at day start) ÷ ${b.daysRemaining} days left</small>\n\n`);
+      md.appendMarkdown(`<small>Budget ${num(b.today)}% of the week = (100 − ${num(b.earlier)}% for earlier days) ÷ ${b.daysRemaining} days left · ${num(b.usedToday)}% used today</small>\n\n`);
     }
 
     if (this.error) {
@@ -276,8 +271,11 @@ function esc(s) {
 
 function activate(context) {
   const cfg = () => vscode.workspace.getConfiguration("aiUsage");
-  // Baselines from older versions used a different format.
-  for (const key of Object.keys(providers)) context.globalState.update(`aiUsage.daily.${key}`, undefined);
+  // Earlier versions stored daily baselines; the budget no longer needs them.
+  for (const key of Object.keys(providers)) {
+    context.globalState.update(`aiUsage.daily.${key}`, undefined);
+    context.globalState.update(`aiUsage.day.${key}`, undefined);
+  }
 
   const list = [];
   let priority = 100;
