@@ -1,0 +1,6 @@
+.github/**
+.gitignore
+AGENTS.md
+CLAUDE.md
+build.py
+*.vsix
