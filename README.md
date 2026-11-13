@@ -3,11 +3,13 @@
 A small, local VS Code extension that keeps your **Claude Code** and **Codex** usage limits in the status bar, with a daily budget so the weekly limit lasts the whole week.
 
 ```
-Claude H 7% 4h28m · W 12% 6d18h    Codex H 5% 4h30m · W 17% 6d16h
+[Claude icon] H 7% 4h │ W 12% 6d │ D 35% 21h    [OpenAI icon] H 5% 4h │ W 17% 6d │ D 20% 19h
 ```
 
 - **H**: the 5-hour limit: percent used, then time until it resets.
 - **W**: the weekly limit: percent used, then time until it resets.
+- **D**: percent of today's budget used, then time until the day ends.
+- Times show only the largest unit (`6d`, `4h`, `12m`); the hover has exact times. The icons are VS Code's built-in `claude` and `openai` codicons.
 - **Text color**: today's budget (see below). Green is within it, yellow means 90% or more of it is used, red is over it.
 - **Background**: yellow when either limit reaches 80%, red at 95%. This takes precedence over the text color.
 

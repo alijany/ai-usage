@@ -3,7 +3,7 @@
   "displayName": "Claude & Codex Usage Budget",
   "description": "Shows Claude Code and Codex usage limits and a daily budget in the status bar.",
   "icon": "icon.png",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "publisher": "Alijany",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/alijany/ai-usage" },

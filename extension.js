@@ -67,14 +67,15 @@ class Provider {
     const s = this.last?.session, w = this.last?.weekly;
     const label = this.def.label;
 
-    // H [5h %] [time to 5h reset] · W [week %] [time to weekly reset] · D [% of today's budget] [time to day end]
-    if (this.error?.auth) this.item.text = `$(key) ${label}`;
-    else if (!this.last) this.item.text = `$(sync~spin) ${label}`;
+    // [icon] H [5h %] [time to reset] │ W [week %] [time to reset] │ D [% of today's budget] [time to day end]
+    const icon = ICON[this.key] || label;
+    if (this.error?.auth) this.item.text = `${icon} $(key)`;
+    else if (!this.last) this.item.text = `${icon} $(sync~spin)`;
     else {
       const b = this.budget;
-      this.item.text = `${label} H ${pct(s)} ${left(s?.resetsAt)} · W ${pct(w)} ${left(w?.resetsAt)}`
-        + (b ? ` · D ${Math.round(shareOf(b))}% ${left(b.dayEnd)}` : "")
-        + (this.error ? " $(warning)" : "");
+      const parts = [`H ${pct(s)} ${short(s?.resetsAt)}`, `W ${pct(w)} ${short(w?.resetsAt)}`];
+      if (b) parts.push(`D ${Math.round(shareOf(b))}% ${short(b.dayEnd)}`);
+      this.item.text = `${icon} ${parts.join(" │ ")}` + (this.error ? " $(warning)" : "");
     }
 
     // Text color = today's budget: green within, yellow near (90%+), red over.
@@ -151,7 +152,9 @@ class Provider {
   }
 }
 
-const pct = (w) => (w ? `${Math.round(w.percent)}%` : "–");
+// Built-in product icons (codicons); the tooltip still names the tool.
+const ICON = { claude: "$(claude)", codex: "$(openai)" };
+const pct = (w) =>(w ? `${Math.round(w.percent)}%` : "–");
 // Percent of today's budget used.
 const shareOf = (b) => (b.today > 0 ? (b.usedToday / b.today) * 100 : b.usedToday > 0 ? 101 : 0);
 const num = (x) => (Math.abs(x) < 10 ? x.toFixed(1) : String(Math.round(x)));
@@ -176,6 +179,13 @@ function left(date) {
   const m = Math.max(0, Math.round((date.getTime() - Date.now()) / 60000));
   const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
   return d ? `${d}d${h}h` : h ? `${h}h${String(mm).padStart(2, "0")}m` : `${mm}m`;
+}
+
+// Largest unit only, for the status bar: 4d, 3h, 12m.
+function short(date) {
+  if (!date) return "–";
+  const m = Math.max(0, Math.round((date.getTime() - Date.now()) / 60000));
+  return m >= 1440 ? `${Math.floor(m / 1440)}d` : m >= 60 ? `${Math.floor(m / 60)}h` : `${m}m`;
 }
 
 function when(date) {
