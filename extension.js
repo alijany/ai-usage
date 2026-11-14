@@ -4,6 +4,11 @@ const { budget } = require("./budget");
 
 const MIN_GAP_MS = 60 * 1000; // never auto-fetch one provider more often than this
 
+const USAGE_URL = {
+  claude: "https://claude.ai/settings/usage",
+  codex: "https://chatgpt.com/codex/settings/usage",
+};
+
 const COLOR = {
   ok: "#3794ff",
   warn: "#cca700",
@@ -26,7 +31,7 @@ class Provider {
     this.authStamp = null;   // credential file mtime when an auth error happened
     this.item = vscode.window.createStatusBarItem(`aiUsage.${key}`, vscode.StatusBarAlignment.Right, priority);
     this.item.name = `${def.label} usage`;
-    this.item.command = "aiUsage.refresh";
+    this.item.command = { command: "aiUsage.open", title: "Open usage page", arguments: [key] };
     context.subscriptions.push(this.item);
     this.render();
     this.item.show();
@@ -133,7 +138,7 @@ class Provider {
       md.appendMarkdown(`**Today** · ${Math.round(share)}% of budget used · `);
       md.appendMarkdown(share <= 100 ? `**${Math.round(100 - share)}% left**\n\n` : `**${Math.round(share - 100)}% over**\n\n`);
       md.appendMarkdown(`${svgBar(share, { color: share > 100 ? COLOR.bad : share >= 90 ? COLOR.warn : COLOR.good })}\n\n`);
-      md.appendMarkdown(`<small>Budget ${num(b.today)}% of the week = (100 − ${num(b.earlier)}% for earlier days) ÷ ${b.daysRemaining} days left · ${num(b.usedToday)}% used today</small>\n\n`);
+      md.appendMarkdown(`<small>Budget ${num(b.today)}% of the week<br>= (100 − ${num(b.earlier)}% for earlier days)<br>÷ ${b.daysRemaining} days left<br>${num(b.usedToday)}% used today</small>\n\n`);
     }
 
     if (this.error) {
@@ -303,6 +308,8 @@ function activate(context) {
       list.forEach((p) => p.render());
     }),
     vscode.commands.registerCommand("aiUsage.refresh", () => tick(true)),
+    vscode.commands.registerCommand("aiUsage.open", (key) =>
+      USAGE_URL[key] && vscode.env.openExternal(vscode.Uri.parse(USAGE_URL[key]))),
     vscode.commands.registerCommand("aiUsage.setTimeZone", pickTimeZone),
     vscode.commands.registerCommand("aiUsage.setClaudeRenewal", setClaudeRenewal),
     vscode.commands.registerCommand("aiUsage.openSettings", () =>

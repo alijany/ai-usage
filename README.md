@@ -13,7 +13,7 @@ A small, local VS Code extension that keeps your **Claude Code** and **Codex** u
 - **Text color**: today's budget (see below). Green is within it, yellow means 90% or more of it is used, red is over it.
 - **Background**: yellow when either limit reaches 80%, red at 95%. This takes precedence over the text color.
 
-Hovering shows progress bars for both limits, when each one resets, today's budget, and the time left in the current subscription period. Clicking refreshes.
+Hovering shows progress bars for both limits, when each one resets, today's budget, and the time left in the current subscription period. Clicking opens the provider's usage page; refresh from the hover link or **AI Usage: Refresh**.
 
 It has no runtime dependencies. The included `build.py` creates a local test VSIX; Marketplace releases are packaged with `vsce`.
 
@@ -62,7 +62,7 @@ These are the endpoints that Claude Code's `/usage` and the Codex extension use.
 
 - Every 3 minutes while the window is focused (`aiUsage.intervalSeconds`, minimum 60).
 - When the window regains focus, and just after a limit resets.
-- When you click the item or run **AI Usage: Refresh**. Manual refreshes are limited to one every 10 seconds.
+- When you use the hover's Refresh link or run **AI Usage: Refresh**. Manual refreshes are limited to one every 10 seconds.
 
 ## Commands and settings
 
