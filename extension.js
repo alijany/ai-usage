@@ -6,7 +6,7 @@ const MIN_GAP_MS = 60 * 1000; // never auto-fetch one provider more often than t
 
 const USAGE_URL = {
   claude: "https://claude.ai/settings/usage",
-  codex: "https://chatgpt.com/codex/settings/usage",
+  codex: "https://chatgpt.com/settings/usage?tab=overview",
 };
 
 const COLOR = {
@@ -29,6 +29,7 @@ class Provider {
     this.error = null;       // last error
     this.lastAttempt = 0;
     this.authStamp = null;   // credential file mtime when an auth error happened
+    this.unavailable = false;
     this.item = vscode.window.createStatusBarItem(`aiUsage.${key}`, vscode.StatusBarAlignment.Right, priority);
     this.item.name = `${def.label} usage`;
     this.item.command = { command: "aiUsage.open", title: "Open usage page", arguments: [key] };
@@ -44,6 +45,7 @@ class Provider {
   }
 
   async refresh(force, intervalMs) {
+    if (this.unavailable) return;
     const now = Date.now();
     if (now - this.lastAttempt < (force ? 10 * 1000 : MIN_GAP_MS)) return;
     if (!force && now < this.dueAt(intervalMs)) return;
@@ -56,6 +58,11 @@ class Provider {
       this.error = null;
       this.updateBudget();
     } catch (err) {
+      if (err.code === "ENOENT") {
+        this.unavailable = true;
+        this.item.dispose();
+        return;
+      }
       const auth = err.auth || err.status === 401 || err.status === 403;
       this.error = { message: err.message, auth };
       if (auth) this.authStamp = fileStamp(this.def.credentials);
@@ -295,7 +302,9 @@ function activate(context) {
   const list = [];
   let priority = 100;
   for (const [key, def] of Object.entries(providers)) {
-    if (cfg().get(`${key}.enabled`, true)) list.push(new Provider(key, def, priority--, context));
+    if (cfg().get(`${key}.enabled`, true) && fileStamp(def.credentials) !== null) {
+      list.push(new Provider(key, def, priority--, context));
+    }
   }
   const intervalMs = () => Math.max(60, cfg().get("intervalSeconds", 180)) * 1000;
   const tick = (force) => list.forEach((p) => p.refresh(force, intervalMs()));

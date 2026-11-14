@@ -13,7 +13,7 @@ A small, local VS Code extension that keeps your **Claude Code** and **Codex** u
 - **Text color**: today's budget (see below). Green is within it, yellow means 90% or more of it is used, red is over it.
 - **Background**: yellow when either limit reaches 80%, red at 95%. This takes precedence over the text color.
 
-Hovering shows progress bars for both limits, when each one resets, today's budget, and the time left in the current subscription period. Clicking opens the provider's usage page; refresh from the hover link or **AI Usage: Refresh**.
+Hovering shows progress bars for each available provider's limits, when each one resets, today's budget, and the time left in the current subscription period. Clicking opens the provider's usage page (Codex opens [ChatGPT usage](https://chatgpt.com/settings/usage?tab=overview)); refresh from the hover link or **AI Usage: Refresh**.
 
 It has no runtime dependencies. The included `build.py` creates a local test VSIX; Marketplace releases are packaged with `vsce`.
 
@@ -37,7 +37,7 @@ Days follow each tool's own weekly window, so a "day" may end at a different clo
 
 ## Where the numbers come from
 
-Both tools must be installed and signed in with a subscription (Claude Pro/Max, ChatGPT Plus/Pro). The extension reads each tool's own stored sign-in and asks that tool's service for current usage. These requests do not run a model and do not use any of your limits.
+Each provider is shown only when its credential file exists, which normally means its client has been installed and signed in. Providers work independently, so Claude can be shown without Codex and vice versa. If you install or sign in to a client after VS Code starts, reload the window to show it. A subscription is required for usage limits (Claude Pro/Max, ChatGPT Plus/Pro). The extension reads each tool's own stored sign-in and asks that tool's service for current usage. These requests do not run a model and do not use any of your limits.
 
 | | Credentials read | Request |
 | --- | --- | --- |
