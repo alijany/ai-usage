@@ -1,0 +1,4 @@
+{
+  "description": "Export existing usage readings locally for the AI Usage status bar",
+  "modules": ["./register.mjs"]
+}

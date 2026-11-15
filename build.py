@@ -13,6 +13,10 @@ files = [
     "package.json",
     "extension.js",
     "usage.js",
+    "claude-local.js",
+    "claude-bridge/plugin/.claude-plugin/plugin.json",
+    "claude-bridge/plugin/hooks/hooks.json",
+    "claude-bridge/plugin/hooks/register.mjs",
     "budget.js",
     "icon.png",
     "README.md",
@@ -23,6 +27,7 @@ content_types = """<?xml version="1.0" encoding="utf-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension=".json" ContentType="application/json"/>
   <Default Extension=".js" ContentType="application/javascript"/>
+  <Default Extension=".mjs" ContentType="application/javascript"/>
   <Default Extension=".png" ContentType="image/png"/>
   <Default Extension=".md" ContentType="text/markdown"/>
   <Default Extension=".vsixmanifest" ContentType="text/xml"/>

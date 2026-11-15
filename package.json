@@ -3,7 +3,7 @@
   "displayName": "Claude & Codex Usage Budget",
   "description": "Shows Claude Code and Codex usage limits and a daily budget in the status bar.",
   "icon": "icon.png",
-  "version": "0.7.6",
+  "version": "0.8.1",
   "publisher": "Alijany",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/alijany/ai-usage" },
@@ -12,6 +12,7 @@
   "activationEvents": ["onStartupFinished"],
   "contributes": {
     "commands": [
+      { "command": "aiUsage.setupClaude", "title": "Enable Claude Usage", "category": "AI Usage" },
       { "command": "aiUsage.refresh", "title": "Refresh", "category": "AI Usage" },
       { "command": "aiUsage.setTimeZone", "title": "Set Time Zone", "category": "AI Usage" },
       { "command": "aiUsage.setClaudeRenewal", "title": "Set Claude Renewal Date", "category": "AI Usage" },
@@ -24,7 +25,7 @@
           "type": "number",
           "default": 180,
           "minimum": 60,
-          "description": "How often to fetch usage while the window is focused. Also fetches when a limit resets and when the window regains focus."
+          "description": "How often to fetch Codex usage while the window is focused. Claude reads local Claude Code mod data every 5 seconds."
         },
         "aiUsage.timeZone": {
           "type": "string",

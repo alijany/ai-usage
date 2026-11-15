@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const { providers, fileStamp, nextAnniversary } = require("./usage");
 const { budget } = require("./budget");
+const { installBridge, bridgeInstalled } = require("./claude-local");
 
 const MIN_GAP_MS = 60 * 1000; // never auto-fetch one provider more often than this
 
@@ -47,16 +48,15 @@ class Provider {
   async refresh(force, intervalMs) {
     if (this.unavailable) return;
     const now = Date.now();
-    if (now - this.lastAttempt < (force ? 10 * 1000 : MIN_GAP_MS)) return;
-    if (!force && now < this.dueAt(intervalMs)) return;
+    if (!this.def.local && now - this.lastAttempt < (force ? 10 * 1000 : MIN_GAP_MS)) return;
+    if (!this.def.local && !force && now < this.dueAt(intervalMs)) return;
     // After an auth error, wait until the client rewrites its credentials.
     if (this.error?.auth && fileStamp(this.def.credentials) === this.authStamp && !force) return;
     this.lastAttempt = now;
     try {
       this.last = await this.def.fetch();
-      this.lastOk = new Date();
+      this.lastOk = this.last.receivedAt || new Date();
       this.error = null;
-      this.updateBudget();
     } catch (err) {
       if (err.code === "ENOENT") {
         this.unavailable = true;
@@ -67,34 +67,41 @@ class Provider {
       this.error = { message: err.message, auth };
       if (auth) this.authStamp = fileStamp(this.def.credentials);
     }
+    this.updateBudget();
     this.render();
   }
 
   updateBudget() {
-    const w = this.last?.weekly;
+    const w = this.currentWindow(this.last?.weekly);
     this.budget = w?.resetsAt ? budget(w.percent, w.resetsAt) : null;
   }
 
+  currentWindow(window) {
+    return this.def.local && window?.resetsAt?.getTime() <= Date.now() ? null : window;
+  }
+
   render() {
-    const s = this.last?.session, w = this.last?.weekly;
+    const s = this.currentWindow(this.last?.session), w = this.currentWindow(this.last?.weekly);
     const label = this.def.label;
 
     // [icon] H [5h %] [time to reset] │ W [week %] [time to reset] │ D [% of today's budget] [time to day end]
     const icon = ICON[this.key] || label;
+    const stale = this.def.local && this.lastOk && Date.now() - this.lastOk.getTime() > 15 * 60 * 1000;
     if (this.error?.auth) this.item.text = `${icon} $(key)`;
+    else if (!this.last && this.def.local) this.item.text = `${icon} ${bridgeInstalled() ? "$(clock)" : "$(plug)"}`;
     else if (!this.last) this.item.text = `${icon} $(sync~spin)`;
     else {
       const b = this.budget;
       const parts = [`H ${pct(s)} ${short(s?.resetsAt)}`, `W ${pct(w)} ${short(w?.resetsAt)}`];
       if (b) parts.push(`D ${Math.round(shareOf(b))}% ${short(b.dayEnd)}`);
-      this.item.text = `${icon} ${parts.join(" │ ")}` + (this.error ? " $(warning)" : "");
+      this.item.text = `${icon} ${parts.join(" │ ")}` + (this.error || stale ? " $(warning)" : "");
     }
 
     // Text color = today's budget: green within, yellow near (90%+), red over.
     // A limit warning background (below) takes precedence over this color.
     const b = this.budget;
     const share = b ? shareOf(b) : null;
-    this.item.color = share === null || this.error ? undefined
+    this.item.color = share === null || this.error || stale ? undefined
       : new vscode.ThemeColor(share > 100 ? "charts.red" : share >= 90 ? "charts.yellow" : "charts.green");
 
     const worst = Math.max(s?.percent ?? 0, w?.percent ?? 0);
@@ -104,6 +111,9 @@ class Provider {
       : undefined;
 
     this.item.tooltip = this.tooltip(s, w, this.budget);
+    this.item.command = this.def.local && !this.last
+      ? { command: "aiUsage.setupClaude", title: "Enable Claude Usage" }
+      : { command: "aiUsage.open", title: "Open usage page", arguments: [this.key] };
   }
 
   // Time left in the current subscription period. Codex states the end date.
@@ -127,9 +137,19 @@ class Provider {
 
   tooltip(s, w, b) {
     const md = new vscode.MarkdownString("", true);
-    md.isTrusted = { enabledCommands: ["aiUsage.refresh", "aiUsage.setClaudeRenewal"] };
+    md.isTrusted = { enabledCommands: ["aiUsage.refresh", "aiUsage.setClaudeRenewal", "aiUsage.setupClaude"] };
     const sub = this.subscription();
     md.appendMarkdown(`**${this.def.label}**${this.last?.plan ? ` · ${this.last.plan}` : ""}${sub ? ` · ${sub.text}` : ""}\n\n`);
+    if (this.def.local) {
+      md.appendMarkdown("Local data from Claude Code · no Claude API requests.\n\n");
+      if (!this.last) {
+        md.appendMarkdown(bridgeInstalled()
+          ? "Waiting for Claude Code. Restart Claude Code, then send a message. If usage does not appear, update Claude Code and check that AI Usage Bridge is enabled in its Plugins dialog.\n\n"
+          : "[Enable Claude usage](command:aiUsage.setupClaude) to show usage here. Then restart Claude Code and send a message.\n\n");
+      }
+      if (this.lastOk && Date.now() - this.lastOk.getTime() > 15 * 60 * 1000) md.appendMarkdown("$(warning) Data is older than 15 minutes; use Claude Code to update it.\n\n");
+      if (this.last && !s && !w) md.appendMarkdown("Waiting for current usage windows from Claude Code. Expired windows are hidden.\n\n");
+    }
 
     if (this.last) {
       md.appendMarkdown(`**5 hours** · ${pct(s)} · resets ${when(s?.resetsAt)}\n\n`);
@@ -155,7 +175,10 @@ class Provider {
       md.appendMarkdown("\n\n");
     }
 
-    md.appendMarkdown(`---\n\n${this.lastOk ? `Updated ${clock(this.lastOk)}` : "Not fetched yet"}`);
+    const updated = this.lastOk && this.def.local
+      ? `${this.lastOk.toLocaleDateString([], { month: "short", day: "numeric", ...tzOpt() })} ${clock(this.lastOk)}`
+      : this.lastOk && clock(this.lastOk);
+    md.appendMarkdown(`---\n\n${updated ? `Updated ${updated}` : "No data yet"}`);
     if (TZ) md.appendMarkdown(` · ${esc(TZ)}`);
     if (TZ === null) md.appendMarkdown(` · $(warning) unknown time zone, using system time`);
     md.appendMarkdown(` · [$(refresh) Refresh](command:aiUsage.refresh)`);
@@ -293,6 +316,11 @@ function esc(s) {
 
 function activate(context) {
   const cfg = () => vscode.workspace.getConfiguration("aiUsage");
+  // Update only a bridge the user already enabled. Never enable it on startup.
+  if (bridgeInstalled()) {
+    try { installBridge({ enable: false }); }
+    catch { vscode.window.showWarningMessage("AI Usage could not update its Claude bridge. Run AI Usage: Enable Claude Usage to retry."); }
+  }
   // Earlier versions stored daily baselines; the budget no longer needs them.
   for (const key of Object.keys(providers)) {
     context.globalState.update(`aiUsage.daily.${key}`, undefined);
@@ -302,7 +330,7 @@ function activate(context) {
   const list = [];
   let priority = 100;
   for (const [key, def] of Object.entries(providers)) {
-    if (cfg().get(`${key}.enabled`, true) && fileStamp(def.credentials) !== null) {
+    if (cfg().get(`${key}.enabled`, true) && (def.local || fileStamp(def.credentials) !== null)) {
       list.push(new Provider(key, def, priority--, context));
     }
   }
@@ -317,6 +345,18 @@ function activate(context) {
       list.forEach((p) => p.render());
     }),
     vscode.commands.registerCommand("aiUsage.refresh", () => tick(true)),
+    vscode.commands.registerCommand("aiUsage.setupClaude", async () => {
+      try {
+        installBridge();
+        list.filter((p) => p.def.local).forEach((p) => p.render());
+        const reload = "Reload Window";
+        const choice = await vscode.window.showInformationMessage(
+          "Claude usage is enabled on this machine. Restart Claude Code, then send a message to see your usage. You can reload this window to restart Claude Code.", reload);
+        if (choice === reload) await vscode.commands.executeCommand("workbench.action.reloadWindow");
+      } catch (error) {
+        vscode.window.showErrorMessage(`Could not enable Claude usage: ${error.message}`);
+      }
+    }),
     vscode.commands.registerCommand("aiUsage.open", (key) =>
       USAGE_URL[key] && vscode.env.openExternal(vscode.Uri.parse(USAGE_URL[key]))),
     vscode.commands.registerCommand("aiUsage.setTimeZone", pickTimeZone),
@@ -331,6 +371,10 @@ function activate(context) {
     if (vscode.window.state.focused) tick(false);
   }, 60 * 1000);
   context.subscriptions.push({ dispose: () => clearInterval(timer) });
+  const localTimer = setInterval(() => {
+    list.filter((p) => p.def.local).forEach((p) => p.refresh(false, 0));
+  }, 5000);
+  context.subscriptions.push({ dispose: () => clearInterval(localTimer) });
   tick(true);
 }
 

@@ -1,7 +1,6 @@
-// Reads Claude Code and Codex usage limits. No dependencies, no writes.
-// Each token is read fresh from the client's own credential file and sent
-// only to the service that issued it. Tokens are never refreshed here:
-// the clients rotate refresh tokens, so refreshing would break their login.
+// Reads local Claude mod data and fetches Codex usage. No dependencies.
+// Only Codex credentials are read, fresh for each request, and sent to ChatGPT.
+// Tokens are never refreshed here: that would interfere with the client's login.
 
 const fs = require("fs");
 const os = require("os");
@@ -11,7 +10,7 @@ const https = require("https");
 const USER_AGENT = "ai-usage-statusbar/0.1";
 const home = os.homedir();
 
-const CLAUDE_CREDENTIALS = path.join(home, ".claude", ".credentials.json");
+const { snapshotFile, rateWindow } = require("./claude-local");
 const CODEX_AUTH = path.join(home, ".codex", "auth.json");
 
 function readJson(file) {
@@ -60,35 +59,6 @@ function windowOf(percent, resetsAt) {
   return { percent, resetsAt: resetsAt ? new Date(resetsAt) : null };
 }
 
-// Claude's profile gives the subscription status and start date, but no end
-// date. It changes rarely, so it is fetched at most every 6 hours.
-const PROFILE_TTL = 6 * 60 * 60 * 1000;
-let claudeProfile = { at: 0, value: null };
-
-async function claudeSubscription(token) {
-  if (Date.now() - claudeProfile.at < PROFILE_TTL) return claudeProfile.value;
-  try {
-    const p = await getJson("api.anthropic.com", "/api/oauth/profile", {
-      Authorization: "Bearer " + token,
-      "anthropic-beta": "oauth-2025-04-20",
-    });
-    const org = p.organization || {};
-    claudeProfile = {
-      at: Date.now(),
-      value: {
-        status: org.subscription_status || null,
-        since: org.subscription_created_at ? new Date(org.subscription_created_at) : null,
-        // No end date is provided, and the start date is not the billing
-        // anchor, so the renewal date comes from the aiUsage.claude.renewsOn setting.
-        until: null,
-      },
-    };
-  } catch {
-    claudeProfile.at = Date.now() - PROFILE_TTL + 10 * 60 * 1000; // retry in 10 minutes
-  }
-  return claudeProfile.value;
-}
-
 // Codex: the ID token stored by Codex carries the current period's dates.
 // It is decoded locally; nothing is sent. It updates when Codex renews its sign-in.
 function codexSubscription(tokens) {
@@ -117,22 +87,27 @@ function nextAnniversary(since, months, now = Date.now()) {
   return null;
 }
 
-// Claude: the endpoint behind /usage in Claude Code. Undocumented.
+// Claude: read only the latest snapshot emitted by the official mod hook.
 async function fetchClaude() {
-  const oauth = readJson(CLAUDE_CREDENTIALS).claudeAiOauth;
-  if (!oauth || !oauth.accessToken) throw Object.assign(new Error("not logged in"), { auth: true });
-  if (oauth.expiresAt && oauth.expiresAt < Date.now()) {
-    throw Object.assign(new Error("token expired; use Claude once to renew it"), { auth: true });
+  let d;
+  try { d = readJson(snapshotFile); }
+  catch (error) {
+    if (error.code === "ENOENT") throw new Error("No local usage received from Claude Code yet");
+    throw new Error("Could not read local Claude usage data");
   }
-  const d = await getJson("api.anthropic.com", "/api/oauth/usage", {
-    Authorization: "Bearer " + oauth.accessToken,
-    "anthropic-beta": "oauth-2025-04-20",
-  });
+  const receivedAt = new Date(d.receivedAt);
+  if (d.version !== 1 || !Number.isFinite(receivedAt.getTime()) || receivedAt.getTime() > Date.now() + 60000) {
+    throw new Error("Invalid local Claude usage data");
+  }
+  const current = (value) => {
+    const v = rateWindow(value);
+    return v && v.resets_at * 1000 > Date.now() ? windowOf(v.used_percentage, v.resets_at * 1000) : null;
+  };
   return {
-    plan: oauth.subscriptionType || null,
-    session: windowOf(d.five_hour && d.five_hour.utilization, d.five_hour && d.five_hour.resets_at),
-    weekly: windowOf(d.seven_day && d.seven_day.utilization, d.seven_day && d.seven_day.resets_at),
-    subscription: await claudeSubscription(oauth.accessToken),
+    session: current(d.five_hour),
+    weekly: current(d.seven_day),
+    receivedAt,
+    subscription: { status: null, until: null },
   };
 }
 
@@ -155,7 +130,7 @@ async function fetchCodex() {
 
 module.exports = {
   providers: {
-    claude: { label: "Claude", fetch: fetchClaude, credentials: CLAUDE_CREDENTIALS },
+    claude: { label: "Claude", fetch: fetchClaude, local: true, source: snapshotFile },
     codex: { label: "Codex", fetch: fetchCodex, credentials: CODEX_AUTH },
   },
   fileStamp,

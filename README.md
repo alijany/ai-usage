@@ -37,45 +37,54 @@ Days follow each tool's own weekly window, so a "day" may end at a different clo
 
 ## Where the numbers come from
 
-Each provider is shown only when its credential file exists, which normally means its client has been installed and signed in. Providers work independently, so Claude can be shown without Codex and vice versa. If you install or sign in to a client after VS Code starts, reload the window to show it. A subscription is required for usage limits (Claude Pro/Max, ChatGPT Plus/Pro). The extension reads each tool's own stored sign-in and asks that tool's service for current usage. These requests do not run a model and do not use any of your limits.
+Claude usage comes from a small local plugin running inside the official Claude Code client, including its VS Code chat panel. The plugin observes the documented `session.measure` event and writes only the latest five-hour and weekly percentages, reset times, and received time to `~/.claude/ai-usage.json`. AI Usage reads that file every 5 seconds. No Claude credentials are read and no Claude API requests are made by this extension or bridge.
 
-| | Credentials read | Request |
-| --- | --- | --- |
-| Claude | `~/.claude/.credentials.json` (`claudeAiOauth.accessToken`) | `GET https://api.anthropic.com/api/oauth/usage` with `anthropic-beta: oauth-2025-04-20` |
-| Codex | `~/.codex/auth.json` (`tokens.access_token`, `tokens.account_id`) | `GET https://chatgpt.com/backend-api/wham/usage` with `ChatGPT-Account-Id` |
+Codex is shown when `~/.codex/auth.json` exists at startup. Its usage still comes from `GET https://chatgpt.com/backend-api/wham/usage`, using `tokens.access_token` and `tokens.account_id` from that file. This endpoint is undocumented. Requests do not run a model.
 
-These are the endpoints that Claude Code's `/usage` and the Codex extension use.
+### Set up Claude local usage
+
+Click the Claude item in the status bar, choose **Enable Claude usage** in its tooltip, or run **AI Usage: Enable Claude Usage** from the Command Palette. The extension installs and enables its bundled local bridge for you. Restart Claude Code (the success message has a **Reload Window** button), then send a normal message. Usage appears within 5 seconds of a measurement. No terminal commands or marketplace registration are needed.
+
+The bridge is installed as a documented [skills-directory plugin](https://code.claude.com/docs/en/plugins/create#make-a-plugin-load-in-every-session) in `~/.claude/skills/ai-usage-bridge`. Setup adds only `enabledPlugins["ai-usage-bridge@skills-dir"] = true` to your personal Claude settings, preserving other settings and saving an exact backup beside `settings.json` before a change. If the previous manually installed `ai-usage-bridge@ai-usage-local` is listed in your personal settings, setup disables that copy so the new bridge can load. Invalid settings and unrelated folders are left intact and setup reports the problem.
+
+Normal extension updates refresh an already installed bridge's code automatically; they do not enable a disabled bridge or change Claude settings. Claude picks up the updated code when restarted. To enable a bridge you previously disabled, click **Enable Claude Usage** again. Organization policies and project overrides still apply.
+
+Requires Claude Code with Mods support (v2.1.299 or newer); update the official extension if the plugin cannot load. The bridge works through the documented [Mods API](https://code.claude.com/docs/en/plugins/mods/reference), whose hooks run in the [VS Code chat panel as well as the CLI](https://code.claude.com/docs/en/plugins/mods/overview#where-mods-run). It does not need a terminal status line or Node.js on PATH. Your organization's plugin policy can prevent it from loading.
+
+Install the bridge in the same environment as AI Usage: a remote or WSL Claude session writes on that remote machine, not to your Windows home directory. Project or session plugin settings may also disable the bridge. Until it receives data, the Claude item offers activation or explains that it is waiting for Claude Code. The extension cannot confirm that the bridge is running until it receives a measurement.
+
+This is a last-reading display, not live polling. Usage changes elsewhere appear only once Claude Code supplies a new measurement. The tooltip shows the received date and time, and marks readings older than 15 minutes. Expired windows disappear rather than displaying zero usage or contributing to the daily budget. Missing readings are never treated as zero. No baselines or usage history are stored; the one local snapshot is replaced with each reading. To stop exporting, disable or uninstall `ai-usage-bridge` in Claude Code's Plugins dialog. If you used the older manual marketplace setup, you can remove `ai-usage-local` from that dialog's Marketplaces tab.
 
 ### Subscription period
 
 - **Codex**: the end of the current period comes from the `id_token` that Codex stores in `~/.codex/auth.json` (`chatgpt_subscription_active_until`). It is decoded locally and nothing is sent. It updates when Codex renews its sign-in, so just after a renewal it can briefly show "period ended".
-- **Claude**: no renewal date is available to tools. `GET https://api.anthropic.com/api/oauth/profile` gives only the subscription status and a start date, and that start date is not the billing date. Enter the date shown at claude.ai → Settings → Billing once, with **AI Usage: Set Claude Renewal Date** or `aiUsage.claude.renewsOn`. Later renewals are then rolled forward monthly (or yearly, see `aiUsage.claude.billingCycle`). The profile is still read, at most every 6 hours, so a status other than `active` is shown. **Neither one is documented**, so either may change without notice. When that happens, a warning icon appears next to the name and the last good numbers stay visible.
+- **Claude**: renewal dates and subscription status are not exported. Enter the date shown at claude.ai ? Settings ? Billing once, with **AI Usage: Set Claude Renewal Date** or `aiUsage.claude.renewsOn`. Later renewals roll forward monthly (or yearly, see `aiUsage.claude.billingCycle`). The extension does not request the OAuth profile endpoint.
 
 ### Security
 
-- Read-only. The extension never writes to either credentials file.
-- It **never refreshes tokens**. Both clients rotate refresh tokens, so refreshing them here could sign the real client out. When a token expires, the item shows a key icon and stops requesting until the client renews its own credentials, which happens the next time you use it.
-- Each token is sent only to the service that issued it, over HTTPS. There is no telemetry and nothing else leaves the machine.
-- Credential files are re-read before every request and are never cached.
+- Claude: no credential access, token refresh, HTTP calls, model calls, or transcript storage. The bridge observes measurements without changing the conversation. It writes only `~/.claude/ai-usage.json`; enabling the bridge installs its code and updates only its own entries in personal Claude settings, with a backup.
+- Codex: credentials are read-only and re-read before every request. The extension never refreshes tokens. It sends the access token only to ChatGPT over HTTPS. When credentials expire, automatic requests stop until Codex updates them.
+- No telemetry. Claude's bridge exports data locally; Codex usage requests go only to its service.
 
 ## Refreshing
 
-- Every 3 minutes while the window is focused (`aiUsage.intervalSeconds`, minimum 60).
-- When the window regains focus, and just after a limit resets.
-- When you use the hover's Refresh link or run **AI Usage: Refresh**. Manual refreshes are limited to one every 10 seconds.
+- Claude: read the local snapshot every 5 seconds, including while unfocused. **Refresh** re-reads that file; it does not ask Anthropic for fresh data.
+- Codex: every 3 minutes while focused (`aiUsage.intervalSeconds`, minimum 60), on focus, and after a limit resets. Manual requests are limited to one every 10 seconds.
+- Each window reads the same Claude snapshot. Each open VS Code window polls Codex independently.
 
 ## Commands and settings
 
 | Command | |
 | --- | --- |
-| AI Usage: Refresh | Fetch now |
+| AI Usage: Refresh | Re-read Claude locally and fetch Codex |
+| AI Usage: Enable Claude Usage | Install and enable the local bridge automatically |
 | AI Usage: Set Time Zone | Pick the time zone for displayed times |
 | AI Usage: Set Claude Renewal Date | Enter the renewal date from Claude's billing page |
 | AI Usage: Open Settings | Open this extension's settings |
 
 | Setting | Default | |
 | --- | --- | --- |
-| `aiUsage.intervalSeconds` | `180` | Fetch interval while focused (minimum 60) |
+| `aiUsage.intervalSeconds` | `180` | Codex fetch interval while focused (minimum 60) |
 | `aiUsage.timeZone` | `""` | IANA time zone for displayed times, e.g. `Asia/Tehran`. Empty uses the system's. It does not affect the budget. |
 | `aiUsage.claude.renewsOn` | `""` | Next Claude renewal date, `YYYY-MM-DD`, from the billing page |
 | `aiUsage.claude.billingCycle` | `monthly` | `monthly` or `yearly`; rolls the renewal date forward |
@@ -110,7 +119,9 @@ The Marketplace release package is marked public and includes the icon as a Mark
 | File | |
 | --- | --- |
 | `extension.js` | Entry point: status bar items, hover, commands, refresh schedule |
-| `usage.js` | Reads credentials and fetches usage from both services |
+| `usage.js` | Reads the local Claude snapshot and fetches Codex usage |
+| `claude-local.js` | Validates local usage windows and installs the bridge |
+| `claude-bridge/` | Claude Code mod that exports usage readings |
 | `budget.js` | Daily budget calculation |
 | `package.json` | Extension manifest: commands and settings |
 | `icon.png` | Extension icon |
@@ -118,9 +129,9 @@ The Marketplace release package is marked public and includes the icon as a Mark
 
 ## Limitations
 
-- Undocumented endpoints, as above.
-- Subscription accounts only. API-key accounts have no plan limits to show.
-- Each open VS Code window polls on its own.
+- Codex uses an undocumented endpoint. Claude requires a separately enabled local bridge plugin.
+- Subscription accounts only. Claude exports available five-hour and weekly plan windows; API-key accounts have no such plan limits to show.
+- Claude data may be stale while the client is idle or when another device is used. The received time is not an independent server freshness guarantee.
 - The bars in the hover use fixed colors chosen to read on both light and dark themes.
 
 ## License
