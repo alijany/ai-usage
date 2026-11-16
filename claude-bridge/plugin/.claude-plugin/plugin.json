@@ -1,6 +1,6 @@
 {
   "name": "ai-usage-bridge",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Writes only existing plan usage percentages and reset times to a local snapshot. No network requests or credentials.",
   "author": { "name": "Alijany" }
 }

@@ -200,6 +200,7 @@ test("activation offers a clickable setup and only installs after the user enabl
   const timers = [];
   const notices = [];
   let installed = false, installs = 0, reloads = 0;
+  let officialInstalled = false, onExtensionsChanged;
   class MarkdownString {
     constructor() { this.value = ""; }
     appendMarkdown(value) { this.value += value; }
@@ -207,9 +208,13 @@ test("activation offers a clickable setup and only installs after the user enabl
   const fakeVscode = {
     StatusBarAlignment: { Right: 1 }, MarkdownString,
     ThemeColor: class {},
+    extensions: {
+      getExtension: (id) => { assert.equal(id, "anthropic.claude-code"); return officialInstalled ? {} : undefined; },
+      onDidChange: (callback) => { onExtensionsChanged = callback; return { dispose() {} }; },
+    },
     window: {
       state: { focused: true },
-      createStatusBarItem: () => { const item = { show() {}, dispose() {} }; items.push(item); return item; },
+      createStatusBarItem: () => { const item = { show() {}, dispose() { this.disposed = true; } }; items.push(item); return item; },
       onDidChangeWindowState: () => ({ dispose() {} }),
       showInformationMessage: async (message, action) => { notices.push(message); return action; },
       showErrorMessage: (message) => { throw new Error(message); },
@@ -239,6 +244,9 @@ test("activation offers a clickable setup and only installs after the user enabl
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../extension.js"), "utf8"), sandbox);
   sandbox.module.exports.activate({ subscriptions: [], globalState: { update() {} } });
   assert.equal(installs, 0);
+  assert.equal(items.length, 0, "no Claude item without the official extension");
+  officialInstalled = true;
+  onExtensionsChanged();
   assert.equal(items[0].command.command, "aiUsage.setupClaude");
   assert.match(items[0].tooltip.value, /Enable Claude usage/);
   await commands.get("aiUsage.setupClaude")();
@@ -247,4 +255,12 @@ test("activation offers a clickable setup and only installs after the user enabl
   assert.match(notices[0], /Restart Claude Code/);
   assert.match(items[0].tooltip.value, /Waiting for Claude Code/);
   assert.ok(timers.some((timer) => timer.ms === 5000));
+  officialInstalled = false;
+  onExtensionsChanged();
+  assert.equal(items[0].disposed, true, "removing Claude Code hides the item");
+  await assert.rejects(commands.get("aiUsage.setupClaude")(), /Install the official Claude Code extension/);
+  assert.equal(installs, 1, "setup cannot install a bridge without Claude Code");
+  officialInstalled = true;
+  onExtensionsChanged();
+  assert.equal(items.length, 2, "reinstalling Claude Code restores the item");
 });

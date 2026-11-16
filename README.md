@@ -37,6 +37,8 @@ Days follow each tool's own weekly window, so a "day" may end at a different clo
 
 ## Where the numbers come from
 
+The Claude status item appears only when the official Claude Code extension (`anthropic.claude-code`) is installed and available to VS Code. It updates visibility when that extension is added or removed. Old bridge files or cached usage alone do not make the item appear.
+
 Claude usage comes from a small local plugin running inside the official Claude Code client, including its VS Code chat panel. The plugin observes the documented `session.measure` event and writes only the latest five-hour and weekly percentages, reset times, and received time to `~/.claude/ai-usage.json`. AI Usage reads that file every 5 seconds. No Claude credentials are read and no Claude API requests are made by this extension or bridge.
 
 Codex is shown when `~/.codex/auth.json` exists at startup. Its usage still comes from `GET https://chatgpt.com/backend-api/wham/usage`, using `tokens.access_token` and `tokens.account_id` from that file. This endpoint is undocumented. Requests do not run a model.

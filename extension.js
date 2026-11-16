@@ -4,6 +4,7 @@ const { budget } = require("./budget");
 const { installBridge, bridgeInstalled } = require("./claude-local");
 
 const MIN_GAP_MS = 60 * 1000; // never auto-fetch one provider more often than this
+const claudeCodeInstalled = () => !!vscode.extensions.getExtension("anthropic.claude-code");
 
 const USAGE_URL = {
   claude: "https://claude.ai/settings/usage",
@@ -317,7 +318,7 @@ function esc(s) {
 function activate(context) {
   const cfg = () => vscode.workspace.getConfiguration("aiUsage");
   // Update only a bridge the user already enabled. Never enable it on startup.
-  if (bridgeInstalled()) {
+  if (claudeCodeInstalled() && bridgeInstalled()) {
     try { installBridge({ enable: false }); }
     catch { vscode.window.showWarningMessage("AI Usage could not update its Claude bridge. Run AI Usage: Enable Claude Usage to retry."); }
   }
@@ -330,23 +331,39 @@ function activate(context) {
   const list = [];
   let priority = 100;
   for (const [key, def] of Object.entries(providers)) {
-    if (cfg().get(`${key}.enabled`, true) && (def.local || fileStamp(def.credentials) !== null)) {
+    if (cfg().get(`${key}.enabled`, true) && (key === "claude" ? claudeCodeInstalled() : fileStamp(def.credentials) !== null)) {
       list.push(new Provider(key, def, priority--, context));
     }
   }
   const intervalMs = () => Math.max(60, cfg().get("intervalSeconds", 180)) * 1000;
   const tick = (force) => list.forEach((p) => p.refresh(force, intervalMs()));
+  const syncClaude = () => {
+    const index = list.findIndex((p) => p.key === "claude");
+    const visible = claudeCodeInstalled() && cfg().get("claude.enabled", true);
+    if (visible && index === -1) {
+      const provider = new Provider("claude", providers.claude, 100, context);
+      list.push(provider);
+      provider.refresh(true, intervalMs());
+    } else if (!visible && index !== -1) {
+      const [provider] = list.splice(index, 1);
+      provider.unavailable = true;
+      provider.item.dispose();
+    }
+  };
 
   TZ = readTimeZone();
   context.subscriptions.push(
+    vscode.extensions.onDidChange(syncClaude),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (!e.affectsConfiguration("aiUsage")) return;
       TZ = readTimeZone();
+      syncClaude();
       list.forEach((p) => p.render());
     }),
     vscode.commands.registerCommand("aiUsage.refresh", () => tick(true)),
     vscode.commands.registerCommand("aiUsage.setupClaude", async () => {
       try {
+        if (!claudeCodeInstalled()) throw new Error("Install the official Claude Code extension before enabling Claude usage.");
         installBridge();
         list.filter((p) => p.def.local).forEach((p) => p.render());
         const reload = "Reload Window";
